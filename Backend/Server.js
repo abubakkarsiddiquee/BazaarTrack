@@ -2,17 +2,13 @@ import express from "express";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import mysql from "mysql2/promise";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import cors from "cors";
 
 puppeteer.use(StealthPlugin());
 
+
+
 const app = express();
 const port = 3000;
-
-app.use(express.json());
-app.use(cors());
 
 const db = mysql.createPool({
   host: "localhost",
@@ -21,10 +17,9 @@ const db = mysql.createPool({
   database: "bazaartrack_db",
 });
 
-const JWT_SECRET = "bazaartrack_secret_key";
-
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Auto-scroll helper for lazy-loaded products
 async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve) => {
@@ -42,22 +37,28 @@ async function autoScroll(page) {
   });
 }
 
+// Generic scraper function
 async function scrapeSite(url, productSelectors, marketName, category = "Fruits & Vegetables") {
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
   const products = [];
+
   try {
     console.log(` Scraping ${marketName}: ${url}`);
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
     await delay(3000);
+
     await autoScroll(page);
+
     const { itemSelector, nameSelector, priceSelector, imageSelector } = productSelectors;
+
     try {
       await page.waitForSelector(itemSelector, { visible: true, timeout: 30000 });
     } catch {
       console.warn(` No products found on ${marketName}`);
       return products;
     }
+
     const items = await page.evaluate(
       ({ itemSelector, nameSelector, priceSelector, imageSelector }) => {
         return Array.from(document.querySelectorAll(itemSelector)).map((p) => {
@@ -71,6 +72,7 @@ async function scrapeSite(url, productSelectors, marketName, category = "Fruits 
       },
       { itemSelector, nameSelector, priceSelector, imageSelector }
     );
+
     for (const item of items) {
       if (item.name && item.price) {
         products.push({
@@ -89,6 +91,7 @@ async function scrapeSite(url, productSelectors, marketName, category = "Fruits 
   } finally {
     await browser.close();
   }
+
   return products;
 }
 
@@ -123,11 +126,20 @@ async function scrapeShwapno() {
   );
 }
 
+// For Shwapno 
+// itemSelector: ".product-item",
+// nameSelector: ".product-item__title",
+// priceSelector: ".product-item__price",
+// imageSelector: "img",
+
+
+
 async function saveProducts(products) {
   for (const p of products) {
     try {
       const [market] = await db.query("SELECT id FROM markets WHERE name = ?", [p.market_name]);
       let marketId = market.length ? market[0].id : null;
+
       if (!marketId) {
         const [res] = await db.query(
           "INSERT INTO markets (name, website_url) VALUES (?, ?)",
@@ -135,11 +147,13 @@ async function saveProducts(products) {
         );
         marketId = res.insertId;
       }
+
       const [product] = await db.query(
         "SELECT id FROM products WHERE name = ? AND category = ?",
         [p.name, p.category]
       );
       let productId = product.length ? product[0].id : null;
+
       if (!productId) {
         const [res] = await db.query(
           "INSERT INTO products (name, unit, category, product_image_url) VALUES (?, ?, ?, ?)",
@@ -147,6 +161,7 @@ async function saveProducts(products) {
         );
         productId = res.insertId;
       }
+
       const today = new Date().toISOString().split("T")[0];
       await db.query(
         "INSERT INTO prices (product_id, market_id, price, scraped_date) VALUES (?, ?, ?, ?)",
@@ -158,45 +173,17 @@ async function saveProducts(products) {
   }
 }
 
-app.post("/api/auth/signup", async (req, res) => {
-  const { name, email, password, location } = req.body;
-  if (!name || !email || !password) return res.status(400).json({ message: "All fields are required" });
-  try {
-    const [existingUser] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (existingUser.length) return res.status(400).json({ message: "Email already registered" });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await db.query("INSERT INTO users (name, email, password, location) VALUES (?, ?, ?, ?)", [name, email, hashedPassword, location]);
-    res.status(201).json({ message: "User registered successfully" });
-  } catch (error) {
-    console.error("Signup error:", error);
-    res.status(500).json({ message: "Server error during signup" });
-  }
-});
-
-app.post("/api/auth/login", async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
-  try {
-    const [users] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
-    if (!users.length) return res.status(404).json({ message: "User not found" });
-    const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid password" });
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-    res.status(200).json({ message: "Login successful", token, user: { id: user.id, name: user.name, email: user.email, location: user.location } });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Server error during login" });
-  }
-});
 
 app.get("/scrape", async (req, res) => {
   console.log(" Starting scraping...");
+
   const chaldalProducts = await scrapeChaldal();
   const meenaProducts = await scrapeMeenaBazar();
   const shwapnoProducts = await scrapeShwapno();
+
   const allProducts = [...chaldalProducts, ...meenaProducts, ...shwapnoProducts];
   await saveProducts(allProducts);
+
   res.json({ message: "Scraping complete", total: allProducts.length });
 });
 
