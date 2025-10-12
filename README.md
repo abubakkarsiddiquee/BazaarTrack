@@ -27,28 +27,28 @@ Built with **React Native, Node.js, and MySQL**, the system uses **web scraping*
 
 ---
 
-BazaarTrack/
-├── frontend/                     # React Native mobile application
-│   ├── app/                      # Expo entry point
-│   ├── src/
-│   │   ├── auth/                 # Authentication screens (Login, Signup)
-│   │   ├── main/                 # Main screens (Home, Compare, History, etc.)
-│   │   ├── components/           # Reusable UI components
-│   │   ├── services/             # API calls and utility functions
-│   │   └── assets/               # Images, icons, fonts
-│   ├── package.json
-│   └── app.json
-│
-├── backend/                      # Node.js + Express.js server
-│   ├── scraping/                 # Web scraping scripts and schedulers
-│   ├── controllers/              # Business logic and API handlers
-│   ├── models/                   # Database models
-│   ├── routes/                   # API endpoints
-│   ├── config/                   # Database and environment setup
-│   ├── server.js                 # Backend entry point
-│   └── package.json
-│
-├── docs/                         # ERD, API documentation, diagrams
-└── README.md
+## Project Structure
 
+```
+BazaarTrack/
+├── frontend/
+│ ├── app/
+│ ├── src/
+│ │ ├── auth/
+│ │ ├── main/
+│ │ ├── components/
+│ │ ├── services/
+│ │ └── assets/
+│ ├── package.json
+│ └── app.json
+├── backend/
+│ ├── scraping/
+│ ├── controllers/
+│ ├── models/
+│ ├── routes/
+│ ├── config/
+│ ├── server.js
+│ └── package.json
+├── docs/
+└── README.md
 
