@@ -1,15 +1,20 @@
 import express from "express";
+import cors from "cors";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import puppeteer from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import mysql from "mysql2/promise";
 
 puppeteer.use(StealthPlugin());
-
-
-
 const app = express();
 const port = 3000;
 
+// Middlewares
+app.use(express.json());
+app.use(cors());
+
+// Database
 const db = mysql.createPool({
   host: "localhost",
   user: "root",
@@ -17,9 +22,12 @@ const db = mysql.createPool({
   database: "bazaartrack_db",
 });
 
+const JWT_SECRET = "bazaartrack_secret_key";
+
+// Delay helper
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Auto-scroll helper for lazy-loaded products
+// Auto-scroll helper
 async function autoScroll(page) {
   await page.evaluate(async () => {
     await new Promise((resolve) => {
@@ -37,7 +45,7 @@ async function autoScroll(page) {
   });
 }
 
-// Generic scraper function
+// Generic site scraper
 async function scrapeSite(url, productSelectors, marketName, category = "Fruits & Vegetables") {
   const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
@@ -47,7 +55,6 @@ async function scrapeSite(url, productSelectors, marketName, category = "Fruits 
     console.log(` Scraping ${marketName}: ${url}`);
     await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
     await delay(3000);
-
     await autoScroll(page);
 
     const { itemSelector, nameSelector, priceSelector, imageSelector } = productSelectors;
@@ -95,14 +102,27 @@ async function scrapeSite(url, productSelectors, marketName, category = "Fruits 
   return products;
 }
 
+// Scraper functions
 async function scrapeChaldal() {
-  return scrapeSite("https://chaldal.com/fresh-fruit", {
-    itemSelector: ".product",
-    nameSelector: ".name",
-    priceSelector: ".price",
-    imageSelector: "img",
-  }, "Chaldal");
+  const urls = [
+    "https://chaldal.com/fresh-fruit",
+    "https://chaldal.com/meat-fish",
+    "https://chaldal.com/dairy",
+    "https://chaldal.com/cleaning",
+  ];
+  const results = [];
+  for (const url of urls) {
+    const res = await scrapeSite(url, {
+      itemSelector: ".product",
+      nameSelector: ".name",
+      priceSelector: ".price",
+      imageSelector: "img",
+    }, "Chaldal");
+    results.push(...res);
+  }
+  return results;
 }
+
 
 async function scrapeMeenaBazar() {
   return scrapeSite("https://meenabazaronline.com/", {
@@ -126,14 +146,7 @@ async function scrapeShwapno() {
   );
 }
 
-// For Shwapno 
-// itemSelector: ".product-item",
-// nameSelector: ".product-item__title",
-// priceSelector: ".product-item__price",
-// imageSelector: "img",
-
-
-
+// Save products
 async function saveProducts(products) {
   for (const p of products) {
     try {
@@ -172,18 +185,63 @@ async function saveProducts(products) {
     }
   }
 }
+// ==================== AUTH ROUTES ====================
 
+// Signup API
+app.post("/api/signup", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ message: "Email and password are required" });
+
+  try {
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (rows.length > 0)
+      return res.status(400).json({ message: "Email already exists" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.query("INSERT INTO users (email, password_hash) VALUES (?, ?)", [
+      email,
+      hashedPassword,
+    ]);
+
+    res.json({ message: "User registered successfully" });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+});
+
+
+// Login API
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ message: "Email and password required" });
+
+  try {
+    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    if (rows.length === 0) return res.status(400).json({ message: "User not found" });
+
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "1d" });
+    res.json({ message: "Login successful", token });
+  } catch (err) {
+    res.status(500).json({ message: "Database error", error: err.message });
+  }
+});
+
+// ==================== SCRAPING ROUTES ====================
 
 app.get("/scrape", async (req, res) => {
-  console.log(" Starting scraping...");
-
+  console.log("Starting scraping...");
   const chaldalProducts = await scrapeChaldal();
   const meenaProducts = await scrapeMeenaBazar();
   const shwapnoProducts = await scrapeShwapno();
-
   const allProducts = [...chaldalProducts, ...meenaProducts, ...shwapnoProducts];
   await saveProducts(allProducts);
-
   res.json({ message: "Scraping complete", total: allProducts.length });
 });
 
@@ -199,4 +257,5 @@ app.get("/products", async (req, res) => {
   res.json(rows);
 });
 
-app.listen(port, () => console.log(` Server running at http://localhost:${port}`));
+// Server
+app.listen(port, () => console.log(`🚀 Server running at http://localhost:${port}`));
