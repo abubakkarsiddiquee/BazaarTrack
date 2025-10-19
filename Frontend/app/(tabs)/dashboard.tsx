@@ -4,9 +4,11 @@ import axios from "axios";
 import ProductCard from "@/components/ProductCard";
 import useFavourites from "@/hooks/useFavourites";
 
-  const API_URL = Platform.OS === "android" || Platform.OS === "ios"
-  ? "http://192.168.0.101:3000"
-  : "http://localhost:3000"; // for web
+const API_URL =
+  Platform.OS === "android" || Platform.OS === "ios"
+    ? "http://10.15.34.61:3000"
+    : "http://localhost:3000";
+
 
 
 

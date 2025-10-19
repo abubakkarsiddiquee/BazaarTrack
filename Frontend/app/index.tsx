@@ -7,7 +7,9 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Welcome to BazaarTrack</Text>
-      <Text style={styles.subtitle}>Track prices from local stores in real-time</Text>
+      <Text style={styles.subtitle}>
+        Track prices from local stores in real-time
+      </Text>
       <Button title="Get Started" onPress={() => router.push("/Auth/Login")} />
     </View>
   );
@@ -19,7 +21,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-    backgroundColor: "#f5f5f5", // light background
+    backgroundColor: "#f5f5f5",
   },
   title: {
     fontSize: 36,

@@ -29,7 +29,7 @@ export default function Signup() {
       if (response.ok) {
         Alert.alert("Success", "Account created successfully!");
         // Navigate to main tab layout after signup
-        router.replace("/(tabs)/dashboard");
+       // router.replace("/(tabs)/dashboard");
       } else {
         Alert.alert("Error", data.message || "Signup failed");
       }
@@ -63,9 +63,9 @@ export default function Signup() {
         <Text style={styles.buttonText}>Sign Up</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => router.replace("/Auth/Login")}>
+      {/* <TouchableOpacity onPress={() => router.replace("/Auth/Login")}>
         <Text style={styles.loginText}>Already have an account? Login</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   );
 }

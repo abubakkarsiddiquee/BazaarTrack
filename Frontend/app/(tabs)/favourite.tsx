@@ -1,66 +1,97 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
-import { Product, getFavourites, removeFavourite } from "../utils/favourites";
+import React, { useState, useCallback } from "react";
+import { View, FlatList, ActivityIndicator, Text, Platform } from "react-native";
+import axios from "axios";
+import ProductCard from "@/components/ProductCard";
+import useFavourites from "@/hooks/useFavourites";
+import { useFocusEffect } from "@react-navigation/native";
 
-export default function Favourite() {
-  const [favourites, setFavourites] = useState<Product[]>([]);
+const API_URL =
+  Platform.OS === "android" || Platform.OS === "ios"
+    ? "http://10.15.34.61:3000"
+    : "http://localhost:3000";
 
-  const loadFavourites = async () => {
-    const favs = await getFavourites();
-    setFavourites(favs);
+type Product = {
+  id: string;
+  name: string;
+  product_image_url: string;
+  prices: Record<string, number>;
+};
+
+export default function Favourites() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { favourites, toggleFavourite } = useFavourites();
+
+  const formatProducts = (data: any[]) =>
+    data.reduce((acc: Product[], curr: any) => {
+      const existing = acc.find((p) => p.id === curr.id);
+      if (existing) existing.prices[curr.market] = curr.price;
+      else
+        acc.push({
+          id: curr.id,
+          name: curr.name,
+          product_image_url: curr.product_image_url,
+          prices: { [curr.market]: curr.price },
+        });
+      return acc;
+    }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/products`);
+      const allProducts = formatProducts(res.data);
+      const favProducts = allProducts.filter((p) => favourites.includes(p.id));
+      setProducts(favProducts);
+    } catch (err) {
+      console.error("Error fetching products:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => {
-    loadFavourites();
-  }, []);
+  // Auto-refresh when the page is focused
+  useFocusEffect(
+    useCallback(() => {
+      fetchProducts();
+    }, [favourites])
+  );
 
-  const handleRemove = async (id: string) => {
-    await removeFavourite(id);
-    loadFavourites();
-  };
+  if (loading)
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#2563eb" />
+        <Text>Loading Favourite Products...</Text>
+      </View>
+    );
+
+  if (products.length === 0)
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>No favourite products added yet.</Text>
+      </View>
+    );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Your Favourite Products</Text>
-      {favourites.length === 0 ? (
-        <Text style={styles.emptyText}>No favourites yet.</Text>
-      ) : (
-        <FlatList
-          data={favourites}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.itemContainer}>
-              <View>
-                <Text style={styles.productName}>{item.name}</Text>
-                <Text style={styles.productDetails}>৳{item.price} | {item.shop}</Text>
-              </View>
-              <TouchableOpacity style={styles.removeButton} onPress={() => handleRemove(item.id)}>
-                <Text style={styles.removeText}>Remove</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      )}
+    <View style={{ flex: 1, paddingTop: 32, backgroundColor: "#f3f4f6" }}>
+      <FlatList
+        data={products}
+        numColumns={2}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 12 }}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        renderItem={({ item }) => (
+          <ProductCard
+            id={item.id}
+            name={item.name}
+            image={{ uri: item.product_image_url || "https://via.placeholder.com/150" }}
+            prices={item.prices}
+            isFavourite={favourites.includes(item.id)}
+            toggleFavourite={toggleFavourite}
+          />
+        )}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#f8f9fa" },
-  title: { fontSize: 28, fontWeight: "700", color: "#1f8ef1", marginBottom: 20 },
-  emptyText: { fontSize: 16, color: "#6c757d", textAlign: "center", marginTop: 50 },
-  itemContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 2,
-  },
-  productName: { fontSize: 18, fontWeight: "600" },
-  productDetails: { fontSize: 14, color: "#6c757d", marginTop: 4 },
-  removeButton: { backgroundColor: "#e74c3c", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
-  removeText: { color: "#fff", fontWeight: "600" },
-});
